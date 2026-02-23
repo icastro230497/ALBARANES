@@ -49,9 +49,9 @@
         // --- CONFIGURACIÓN ---
         // Clave API proporcionada por el usuario
         const apiKey = "AIzaSyCWACbPgBeaMuPyrZS0llgjRegva0GbM6Q"; 
-        // Usamos la versión estable v1 para evitar errores de campos desconocidos
+        // Cambiamos a v1beta para solucionar el error de modelo no encontrado
         const MODEL_NAME = "gemini-1.5-flash";
-        const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
         // --- TABLA DE PAÍSES ---
         const COUNTRY_MAP = {
@@ -184,8 +184,8 @@
             const processAI = async () => {
                 setIsScanning(true); setErrorMsg(null);
                 
-                // Instrucciones integradas en el prompt para evitar errores de campos desconocidos
-                const systemPrompt = `Eres un experto logístico. Tu tarea es extraer datos de un albarán de Mouser.
+                // Prompt simplificado con instrucciones directas para evitar errores de campos desconocidos
+                const fullPrompt = `Eres un experto logístico. Tu tarea es extraer datos de un albarán de Mouser.
                 Extrae: Invoice, PO (Pedido), Mouser PN, Customer PN, Cantidad, Date Code, Lote y COO.
                 RESPONDE EXCLUSIVAMENTE CON UN JSON VÁLIDO siguiendo este formato:
                 {
@@ -198,14 +198,13 @@
                   ]
                 }
                 
-                Analiza este contenido: ${rawText}`;
+                Contenido del documento: ${rawText}`;
                 
                 try {
-                    // Payload simplificado al máximo para compatibilidad v1
                     const payload = {
                         contents: [{ 
                             parts: [
-                                { text: systemPrompt },
+                                { text: fullPrompt },
                                 ...(fileData.base64 ? [{ inlineData: { mimeType: fileData.mime, data: fileData.base64 } }] : [])
                             ] 
                         }]
@@ -219,7 +218,7 @@
 
                     if (!response.ok) {
                         const err = await response.json();
-                        throw new Error(err.error?.message || "Error de red");
+                        throw new Error(err.error?.message || "Error de conexión");
                     }
 
                     const res = await response.json();
@@ -295,11 +294,11 @@
                                     {data.items.map(item => (
                                         <div key={item.id} className="bg-white p-8 rounded-[2rem] border shadow-xl grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 items-end relative overflow-hidden group">
                                             <div className="absolute top-0 left-0 w-2 h-full bg-blue-600"></div>
-                                            <EditField label="Mouser PN" value={item.mouserPn} onChange={v => updateItem(item.id, 'mouserPn', v)} />
-                                            <EditField label="Customer PN" value={item.custPn} onChange={v => updateItem(item.id, 'custPn', v)} />
-                                            <EditField label="Cant." value={item.qty} type="number" onChange={v => updateItem(item.id, 'qty', v)} />
-                                            <EditField label="Date Code" value={item.dateCode} onChange={v => updateItem(item.id, 'dateCode', v)} />
-                                            <EditField label="COO" value={item.coo} onChange={v => updateItem(item.id, 'coo', v)} />
+                                            <EditField label="Mouser PN" value={item.mouserPn} onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, mouserPn: v} : i)})} />
+                                            <EditField label="Customer PN" value={item.custPn} onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, custPn: v} : i)})} />
+                                            <EditField label="Cant." value={item.qty} type="number" onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, qty: parseInt(v)} : i)})} />
+                                            <EditField label="Date Code" value={item.dateCode} onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, dateCode: v} : i)})} />
+                                            <EditField label="COO" value={item.coo} onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, coo: getShortCoo(v)} : i)})} />
                                             <button onClick={() => setData({...data, items: data.items.filter(i => i.id !== item.id)})} className="bg-red-50 text-red-600 p-3 rounded-xl font-black text-[10px]">BORRAR</button>
                                         </div>
                                     ))}
