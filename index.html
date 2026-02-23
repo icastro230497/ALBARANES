@@ -47,10 +47,11 @@
         const { useState, useEffect, useRef } = React;
 
         // --- CONFIGURACIÓN ---
+        // Clave API proporcionada por el usuario
         const apiKey = "AIzaSyCWACbPgBeaMuPyrZS0llgjRegva0GbM6Q"; 
+        // Usamos la versión estable v1 para evitar errores de campos desconocidos
         const MODEL_NAME = "gemini-1.5-flash";
-        // Usamos v1beta para soporte de JSON mode
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
         // --- TABLA DE PAÍSES ---
         const COUNTRY_MAP = {
@@ -174,7 +175,7 @@
                     const reader = new FileReader();
                     reader.onload = () => {
                         setFileData({ base64: reader.result.split(',')[1], mime: file.type });
-                        setRawText(`Archivo cargado: ${file.name}`);
+                        setRawText(`Archivo: ${file.name}`);
                     };
                     reader.readAsDataURL(file);
                 }
@@ -183,10 +184,10 @@
             const processAI = async () => {
                 setIsScanning(true); setErrorMsg(null);
                 
-                // Las instrucciones van aquí para evitar el error de Unknown Field
-                const fullPrompt = `Eres un experto logístico. Tu tarea es extraer datos de un albarán de electrónica de Mouser. 
-                Extrae: Factura (Invoice), PO (Pedido), Mouser PN, Customer PN, Cantidad, Date Code, Lote y COO.
-                Devuelve la respuesta estrictamente en formato JSON válido sin markdown:
+                // Instrucciones integradas en el prompt para evitar errores de campos desconocidos
+                const systemPrompt = `Eres un experto logístico. Tu tarea es extraer datos de un albarán de Mouser.
+                Extrae: Invoice, PO (Pedido), Mouser PN, Customer PN, Cantidad, Date Code, Lote y COO.
+                RESPONDE EXCLUSIVAMENTE CON UN JSON VÁLIDO siguiendo este formato:
                 {
                   "invoice": "string",
                   "order": "string",
@@ -197,20 +198,17 @@
                   ]
                 }
                 
-                Contenido del documento a analizar: ${rawText}`;
+                Analiza este contenido: ${rawText}`;
                 
                 try {
+                    // Payload simplificado al máximo para compatibilidad v1
                     const payload = {
                         contents: [{ 
                             parts: [
-                                { text: fullPrompt },
+                                { text: systemPrompt },
                                 ...(fileData.base64 ? [{ inlineData: { mimeType: fileData.mime, data: fileData.base64 } }] : [])
                             ] 
-                        }],
-                        generationConfig: { 
-                            response_mime_type: "application/json",
-                            temperature: 0.1 
-                        }
+                        }]
                     };
                     
                     const response = await fetch(API_URL, {
@@ -221,15 +219,16 @@
 
                     if (!response.ok) {
                         const err = await response.json();
-                        throw new Error(err.error?.message || "Error al conectar con la IA.");
+                        throw new Error(err.error?.message || "Error de red");
                     }
 
                     const res = await response.json();
                     let text = res.candidates[0].content.parts[0].text;
-                    // Limpieza por si acaso devuelve ```json
-                    text = text.replace(/```json|```/g, "").trim();
                     
+                    // Limpieza robusta del JSON
+                    text = text.replace(/```json|```/g, "").trim();
                     const extracted = JSON.parse(text);
+                    
                     extracted.items = (extracted.items || []).map(i => ({ 
                         ...i, 
                         id: Math.random().toString(36).substr(2, 9), 
@@ -239,8 +238,8 @@
                     setData(extracted); 
                     setView('print');
                 } catch (e) { 
-                    console.error(e);
-                    setErrorMsg(`Error: ${e.message}. Intenta copiar el texto del PDF manualmente.`); 
+                    console.error("Error completo:", e);
+                    setErrorMsg(`Error: ${e.message}. Intenta copiar el texto manualmente.`); 
                 } finally { setIsScanning(false); }
             };
 
@@ -249,12 +248,12 @@
                     {view !== 'scan' && (
                         <nav className="header-nav bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50 print:hidden">
                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('scan')}>
-                                <div className="bg-blue-600 text-white w-8 h-8 rounded flex items-center justify-center font-black text-xs shadow-lg">M</div>
+                                <div className="bg-blue-600 text-white w-8 h-8 rounded flex items-center justify-center font-black text-xs">M</div>
                                 <span className="text-xs font-black uppercase tracking-widest hidden md:inline">Logistics Terminal</span>
                             </div>
                             <div className="flex gap-2 bg-slate-800 p-1 rounded-xl">
-                                <button onClick={() => setView('edit')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'edit' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>EDITAR</button>
-                                <button onClick={() => setView('print')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'print' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>PREVIA</button>
+                                <button onClick={() => setView('edit')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'edit' ? 'bg-blue-600' : 'text-slate-400'}`}>EDITAR</button>
+                                <button onClick={() => setView('print')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'print' ? 'bg-blue-600' : 'text-slate-400'}`}>PREVIA</button>
                             </div>
                             <div className="flex gap-2">
                                 <button onClick={() => setIsAppMode(!isAppMode)} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-black border border-slate-700 uppercase">Modo App</button>
@@ -276,7 +275,7 @@
                                             <input type="file" className="hidden" onChange={handleFile} accept="application/pdf,image/*" />
                                         </label>
                                         <div className="relative flex items-center justify-center"><span className="absolute inset-0 border-t border-slate-100 top-1/2"></span><span className="relative bg-white px-3 text-[10px] font-black text-slate-300 uppercase">O pega el texto</span></div>
-                                        <textarea value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder="Pega aquí el texto del documento..." className="w-full h-32 p-6 bg-slate-50 border border-slate-200 rounded-[1.5rem] text-sm outline-none resize-none shadow-inner"></textarea>
+                                        <textarea value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder="Contenido del albarán..." className="w-full h-32 p-6 bg-slate-50 border border-slate-200 rounded-[1.5rem] text-sm outline-none resize-none shadow-inner"></textarea>
                                         <button onClick={processAI} disabled={isScanning || (!rawText.trim() && !fileData.base64)} className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black shadow-2xl hover:bg-blue-700 disabled:bg-slate-200 flex items-center justify-center gap-4 text-xl">
                                             {isScanning ? <div className="animate-spin h-6 w-6 border-4 border-white border-t-transparent rounded-full"></div> : "IDENTIFICAR MATERIAL"}
                                         </button>
@@ -296,11 +295,11 @@
                                     {data.items.map(item => (
                                         <div key={item.id} className="bg-white p-8 rounded-[2rem] border shadow-xl grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 items-end relative overflow-hidden group">
                                             <div className="absolute top-0 left-0 w-2 h-full bg-blue-600"></div>
-                                            <EditField label="Mouser PN" value={item.mouserPn} onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, mouserPn: v} : i)})} />
-                                            <EditField label="Customer PN" value={item.custPn} onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, custPn: v} : i)})} />
-                                            <EditField label="Cant." value={item.qty} type="number" onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, qty: parseInt(v)} : i)})} />
-                                            <EditField label="Date Code" value={item.dateCode} onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, dateCode: v} : i)})} />
-                                            <EditField label="COO" value={item.coo} onChange={v => setData({...data, items: data.items.map(i => i.id === item.id ? {...i, coo: getShortCoo(v)} : i)})} />
+                                            <EditField label="Mouser PN" value={item.mouserPn} onChange={v => updateItem(item.id, 'mouserPn', v)} />
+                                            <EditField label="Customer PN" value={item.custPn} onChange={v => updateItem(item.id, 'custPn', v)} />
+                                            <EditField label="Cant." value={item.qty} type="number" onChange={v => updateItem(item.id, 'qty', v)} />
+                                            <EditField label="Date Code" value={item.dateCode} onChange={v => updateItem(item.id, 'dateCode', v)} />
+                                            <EditField label="COO" value={item.coo} onChange={v => updateItem(item.id, 'coo', v)} />
                                             <button onClick={() => setData({...data, items: data.items.filter(i => i.id !== item.id)})} className="bg-red-50 text-red-600 p-3 rounded-xl font-black text-[10px]">BORRAR</button>
                                         </div>
                                     ))}
