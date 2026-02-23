@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mouser Smart Scan Web</title>
-    <!-- Librerías de React, Babel (para procesar JSX) y Tailwind CSS -->
+    <!-- Librerías de React, Babel y Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
@@ -13,12 +13,11 @@
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; }
         
-        /* Estilos específicos para impresión */
         @media print {
-            body { background: white !important; margin: 0; padding: 0; }
-            nav, .no-print, button, header { display: none !important; }
+            body { background: white !important; }
+            nav, .no-print, button, .header-nav { display: none !important; }
             main { padding: 0 !important; width: 100% !important; margin: 0 !important; }
             @page { margin: 0.5cm; size: A4 portrait; }
             .label-card { 
@@ -26,13 +25,13 @@
                 border: 3px solid black !important;
                 break-inside: avoid;
                 page-break-inside: avoid;
-                margin-bottom: 15px;
+                margin-bottom: 20px;
             }
         }
 
-        .animate-in { animation: fadeIn 0.4s ease-out forwards; }
+        .animate-fade { animation: fadeIn 0.4s ease-out forwards; }
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(15px); }
+            from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -41,22 +40,18 @@
     </style>
 </head>
 <body>
-    <div id="root">
-        <div style="height: 100vh; display: flex; align-items: center; justify-content: center; font-family: sans-serif; color: #64748b;">
-            Iniciando terminal de etiquetas...
-        </div>
-    </div>
+    <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
         // --- CONFIGURACIÓN ---
-        // ⚠️ CLAVE API PROPORCIONADA POR EL USUARIO ⚠️
         const apiKey = "AIzaSyCWACbPgBeaMuPyrZS0llgjRegva0GbM6Q"; 
-        // Usamos la versión estable v1 y el modelo flash
-        const API_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent";
+        // Usamos v1beta que es la que soporta systemInstruction y responseMimeType
+        const MODEL_NAME = "gemini-1.5-flash";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
-        // --- TABLA DE PAÍSES (Diminutivos de 2 letras) ---
+        // --- TABLA DE PAÍSES ---
         const COUNTRY_MAP = {
             "AD": "Andorra", "AE": "Utd.Arab Emir.", "AF": "Afghanistan", "AG": "Antigua/Barbuda", "AI": "Anguilla",
             "AL": "Albania", "AM": "Armenia", "AN": "Dutch Antilles", "AO": "Angola", "AQ": "Antarctica",
@@ -81,7 +76,7 @@
             "IN": "India", "IO": "Brit.Ind.Oc.Ter", "IQ": "Iraq", "IR": "Iran", "IS": "Iceland",
             "IT": "Italy", "JM": "Jamaica", "JO": "Jordan", "JP": "Japan", "KE": "Kenya", "KG": "Kyrgyzstan",
             "KH": "Cambodia", "KI": "Kiribati", "KM": "Comoros", "KN": "St Kitts&Nevis", "KP": "North Korea",
-            "KR": "South Korea", "KW": "Kuwait", "KY": "Cayman Islands", "KZ": "Kazakhstan", "LA": "Laos",
+            "KR": "South Korea", "KW": "Kuwait", "KY": "Cayman Islands", "KZ": "Kazakhstan", "LA": "LAOS",
             "LB": "Lebanon", "LC": "St. Lucia", "LI": "Liechtenstein", "LK": "Sri Lanka", "LR": "Liberia",
             "LS": "Lesotho", "LT": "Lithuania", "LU": "Luxembourg", "LV": "Latvia", "LY": "Libya",
             "MA": "Morocco", "MC": "Monaco", "MD": "Moldavia", "MG": "Madagascar", "MH": "Marshall Islnds",
@@ -136,13 +131,13 @@
                             font: "monospace",
                             margin: 2
                         });
-                    } catch (e) { console.error("Barcode fail:", e); }
+                    } catch (e) { console.error("Error Barcode:", e); }
                 }
             }, [value]);
 
-            const themeClass = blue ? "text-blue-700 border-blue-100" : "text-slate-600 border-slate-100";
+            const theme = blue ? "text-blue-700 border-blue-100" : "text-slate-600 border-slate-100";
             return (
-                <div className={`flex flex-col items-center border rounded bg-white p-1 shadow-sm ${themeClass}`}>
+                <div className={`flex flex-col items-center border rounded bg-white p-1 shadow-sm ${theme}`}>
                     <span className="text-[7px] font-black uppercase w-full px-1">{label}</span>
                     <svg ref={svgRef} className="max-w-full"></svg>
                 </div>
@@ -161,7 +156,7 @@
             </div>
         );
 
-        // --- APP PRINCIPAL ---
+        // --- APP ---
 
         function App() {
             const [view, setView] = useState('scan');
@@ -178,33 +173,32 @@
                     const reader = new FileReader();
                     reader.onload = () => {
                         setFileData({ base64: reader.result.split(',')[1], mime: file.type });
-                        setRawText(`Archivo seleccionado: ${file.name}`);
+                        setRawText(`Archivo: ${file.name}`);
                     };
                     reader.readAsDataURL(file);
                 }
             };
 
             const processAI = async () => {
-                if (!apiKey || apiKey.trim() === "") {
-                    setErrorMsg("Falta la API KEY. Por favor, pégala en el código del archivo.");
-                    return;
-                }
                 setIsScanning(true); setErrorMsg(null);
-                const systemPrompt = "Extrae datos de albarán industrial. Devuelve ÚNICAMENTE un JSON válido sin bloques markdown: { \"invoice\": \"str\", \"order\": \"str\", \"internalRef\": \"str\", \"date\": \"YYYY-MM-DD\", \"items\": [{ \"mouserPn\": \"str\", \"custPn\": \"str\", \"desc\": \"str\", \"qty\": num, \"dateCode\": \"str\", \"lotCode\": \"str\", \"coo\": \"str\" }] }";
+                const systemPrompt = "Eres un experto en logística. Extrae datos de un albarán. Devuelve ÚNICAMENTE un JSON válido sin bloques markdown: { \"invoice\": \"str\", \"order\": \"str\", \"internalRef\": \"str\", \"date\": \"YYYY-MM-DD\", \"items\": [{ \"mouserPn\": \"str\", \"custPn\": \"str\", \"desc\": \"str\", \"qty\": num, \"dateCode\": \"str\", \"lotCode\": \"str\", \"coo\": \"str\" }] }";
+                
                 try {
                     const payload = {
-                        contents: [{ parts: [{ text: `Analiza este documento: ${rawText}` }, ...(fileData.base64 ? [{ inlineData: { mimeType: fileData.mime, data: fileData.base64 } }] : [])] }],
+                        contents: [{ parts: [{ text: `Procesa este documento: ${rawText}` }, ...(fileData.base64 ? [{ inlineData: { mimeType: fileData.mime, data: fileData.base64 } }] : [])] }],
                         systemInstruction: { parts: [{ text: systemPrompt }] },
                         generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
                     };
                     
-                    const response = await fetch(`${API_URL}?key=${apiKey}`, {
-                        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+                    const response = await fetch(API_URL, {
+                        method: "POST", 
+                        headers: { "Content-Type": "application/json" }, 
+                        body: JSON.stringify(payload)
                     });
 
                     if (!response.ok) {
                         const err = await response.json();
-                        throw new Error(err.error?.message || "Error al conectar con Gemini");
+                        throw new Error(err.error?.message || "Error de conexión");
                     }
 
                     const res = await response.json();
@@ -213,16 +207,14 @@
                     extracted.items = (extracted.items || []).map(i => ({ ...i, id: Math.random().toString(36).substr(2, 9), coo: getShortCoo(i.coo) }));
                     setData(extracted); setView('print');
                 } catch (e) { 
-                    setErrorMsg(`Error: ${e.message}. Verifica tu API Key y conexión.`); 
-                } finally { 
-                    setIsScanning(false); 
-                }
+                    setErrorMsg(`Error: ${e.message}. Intenta copiar el texto del PDF manualmente.`); 
+                } finally { setIsScanning(false); }
             };
 
             return (
                 <div className={`min-h-screen transition-all ${isAppMode ? 'bg-white' : 'bg-slate-100'}`}>
                     {view !== 'scan' && (
-                        <nav className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50 print:hidden">
+                        <nav className="header-nav bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50 print:hidden">
                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('scan')}>
                                 <div className="bg-blue-600 text-white w-8 h-8 rounded flex items-center justify-center font-black text-xs">M</div>
                                 <span className="text-xs font-black uppercase tracking-widest hidden md:inline">Logistics Terminal</span>
@@ -232,17 +224,17 @@
                                 <button onClick={() => setView('print')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'print' ? 'bg-blue-600' : 'text-slate-400'}`}>PREVIA</button>
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={() => setIsAppMode(!isAppMode)} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-black border border-slate-700">MODO APP</button>
-                                <button onClick={() => window.print()} className="bg-white text-slate-900 px-5 py-1.5 rounded-lg text-[10px] font-black shadow-lg">IMPRIMIR</button>
+                                <button onClick={() => setIsAppMode(!isAppMode)} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-black border border-slate-700 uppercase">Modo App</button>
+                                <button onClick={() => window.print()} className="bg-white text-slate-900 px-5 py-1.5 rounded-lg text-[10px] font-black shadow-lg uppercase">Imprimir</button>
                             </div>
                         </nav>
                     )}
                     <main className="flex flex-col items-center justify-center p-6">
                         {view === 'scan' && (
-                            <div className="max-w-3xl w-full mt-10 md:mt-16 text-center animate-in">
+                            <div className="max-w-3xl w-full mt-10 md:mt-16 text-center animate-fade">
                                 <div className="w-24 h-24 bg-blue-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl font-black text-4xl">M</div>
-                                <h1 className="text-5xl font-black text-slate-900 tracking-tighter mb-4">Smart Scan Terminal</h1>
-                                <p className="text-slate-500 text-xl font-medium mb-12">Conversión industrial de albaranes a etiquetas.</p>
+                                <h1 className="text-5xl font-black text-slate-900 tracking-tighter mb-4">Mouser Smart Scan</h1>
+                                <p className="text-slate-500 text-xl font-medium mb-12">Países automáticos y etiquetas industriales.</p>
                                 {errorMsg && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl mb-8 text-sm font-bold animate-pulse">⚠️ {errorMsg}</div>}
                                 <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-200 mb-10">
                                     <div className="space-y-6">
@@ -260,7 +252,7 @@
                             </div>
                         )}
                         {view === 'edit' && (
-                            <div className="max-w-6xl w-full py-8 space-y-10 animate-in">
+                            <div className="max-w-6xl w-full py-8 space-y-10 animate-fade">
                                 <div className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl grid grid-cols-1 md:grid-cols-4 gap-8">
                                     <EditField label="Factura" value={data.invoice} onChange={v => setData({...data, invoice: v})} />
                                     <EditField label="Pedido" value={data.order} onChange={v => setData({...data, order: v})} />
@@ -283,7 +275,7 @@
                             </div>
                         )}
                         {view === 'print' && (
-                            <div className="w-full max-w-5xl py-12 px-4 space-y-12 animate-in print:p-0">
+                            <div className="w-full max-w-5xl py-12 px-4 space-y-12 animate-fade print:p-0">
                                 {data.items.map((item, idx) => (
                                     <div key={item.id} className="label-card bg-white p-12 border-[5px] border-slate-900 break-inside-avoid shadow-2xl w-full flex flex-col">
                                         <div className="flex justify-between border-b-[8px] border-slate-900 pb-8 mb-10">
