@@ -46,12 +46,13 @@
         const { useState, useEffect, useRef } = React;
 
         // --- CONFIGURACIÓN ---
+        // Clave API proporcionada por el usuario
         const apiKey = "AIzaSyCWACbPgBeaMuPyrZS0llgjRegva0GbM6Q"; 
-        // Usamos v1beta que es la que soporta systemInstruction y responseMimeType
+        // Usamos la versión estable v1 para máxima compatibilidad
         const MODEL_NAME = "gemini-1.5-flash";
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
-        // --- TABLA DE PAÍSES ---
+        // --- TABLA DE PAÍSES (Basado en imagen_2d0d44.png) ---
         const COUNTRY_MAP = {
             "AD": "Andorra", "AE": "Utd.Arab Emir.", "AF": "Afghanistan", "AG": "Antigua/Barbuda", "AI": "Anguilla",
             "AL": "Albania", "AM": "Armenia", "AN": "Dutch Antilles", "AO": "Angola", "AQ": "Antarctica",
@@ -173,7 +174,7 @@
                     const reader = new FileReader();
                     reader.onload = () => {
                         setFileData({ base64: reader.result.split(',')[1], mime: file.type });
-                        setRawText(`Archivo: ${file.name}`);
+                        setRawText(`Archivo seleccionado: ${file.name}`);
                     };
                     reader.readAsDataURL(file);
                 }
@@ -184,10 +185,11 @@
                 const systemPrompt = "Eres un experto en logística. Extrae datos de un albarán. Devuelve ÚNICAMENTE un JSON válido sin bloques markdown: { \"invoice\": \"str\", \"order\": \"str\", \"internalRef\": \"str\", \"date\": \"YYYY-MM-DD\", \"items\": [{ \"mouserPn\": \"str\", \"custPn\": \"str\", \"desc\": \"str\", \"qty\": num, \"dateCode\": \"str\", \"lotCode\": \"str\", \"coo\": \"str\" }] }";
                 
                 try {
+                    // Estructura de payload corregida para v1 estable
                     const payload = {
                         contents: [{ parts: [{ text: `Procesa este documento: ${rawText}` }, ...(fileData.base64 ? [{ inlineData: { mimeType: fileData.mime, data: fileData.base64 } }] : [])] }],
-                        systemInstruction: { parts: [{ text: systemPrompt }] },
-                        generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+                        system_instruction: { parts: [{ text: systemPrompt }] },
+                        generationConfig: { response_mime_type: "application/json", temperature: 0.1 }
                     };
                     
                     const response = await fetch(API_URL, {
@@ -279,7 +281,7 @@
                                 {data.items.map((item, idx) => (
                                     <div key={item.id} className="label-card bg-white p-12 border-[5px] border-slate-900 break-inside-avoid shadow-2xl w-full flex flex-col">
                                         <div className="flex justify-between border-b-[8px] border-slate-900 pb-8 mb-10">
-                                            <div><h2 className="text-5xl font-black uppercase tracking-tighter text-slate-900 mb-1">Mouser Logistics</h2><p className="text-[14px] font-bold text-slate-500 uppercase tracking-[0.4em]">Logística Certificada Celéstica</p></div>
+                                            <div><h2 className="text-5xl font-black uppercase leading-none tracking-tighter text-slate-900 mb-1">Mouser Logistics</h2><p className="text-[14px] font-bold text-slate-500 uppercase tracking-[0.4em]">Logística Certificada Celéstica</p></div>
                                             <div className="text-right flex flex-col justify-center border-l-4 border-slate-100 pl-10"><span className="text-[11px] font-black text-slate-400 block uppercase">Factura</span><span className="text-4xl font-mono font-black">{data.invoice}</span></div>
                                         </div>
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 mb-12">
