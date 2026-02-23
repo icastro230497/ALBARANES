@@ -295,4 +295,19 @@
                                         </div>
                                         <div className="border-t-2 border-slate-100 pt-10 text-[14px] font-bold text-slate-500 flex justify-between items-end">
                                             <div className="flex-1 pr-10 border-r-2 border-slate-100"><span className="text-[11px] font-black text-slate-300 uppercase block mb-2 tracking-widest">Descripción</span><p className="text-xl font-black text-slate-900 uppercase italic leading-tight">{item.desc || 'Electronic Components'}</p></div>
-                                            <div className="text-right flex flex-col font-mono text-[11px] pl-10 space-y-1"><span>REF: {data.internalRef}</span><span>GEN: {new Date
+                                            <div className="text-right flex flex-col font-mono text-[11px] pl-10 space-y-1"><span>REF: {data.internalRef}</span><span>GEN: {new Date().toLocaleTimeString()}</span></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
