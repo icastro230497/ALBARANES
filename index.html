@@ -26,6 +26,7 @@
                 break-inside: avoid;
                 page-break-inside: avoid;
                 margin-bottom: 20px;
+                padding: 1.5rem !important;
             }
         }
 
@@ -46,13 +47,12 @@
         const { useState, useEffect, useRef } = React;
 
         // --- CONFIGURACIÓN ---
-        // Clave API proporcionada por el usuario
         const apiKey = "AIzaSyCWACbPgBeaMuPyrZS0llgjRegva0GbM6Q"; 
-        // Usamos la versión estable v1 para máxima compatibilidad
         const MODEL_NAME = "gemini-1.5-flash";
-        const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+        // Usamos v1beta para soporte de JSON mode
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
-        // --- TABLA DE PAÍSES (Basado en imagen_2d0d44.png) ---
+        // --- TABLA DE PAÍSES ---
         const COUNTRY_MAP = {
             "AD": "Andorra", "AE": "Utd.Arab Emir.", "AF": "Afghanistan", "AG": "Antigua/Barbuda", "AI": "Anguilla",
             "AL": "Albania", "AM": "Armenia", "AN": "Dutch Antilles", "AO": "Angola", "AQ": "Antarctica",
@@ -174,7 +174,7 @@
                     const reader = new FileReader();
                     reader.onload = () => {
                         setFileData({ base64: reader.result.split(',')[1], mime: file.type });
-                        setRawText(`Archivo seleccionado: ${file.name}`);
+                        setRawText(`Archivo cargado: ${file.name}`);
                     };
                     reader.readAsDataURL(file);
                 }
@@ -182,14 +182,35 @@
 
             const processAI = async () => {
                 setIsScanning(true); setErrorMsg(null);
-                const systemPrompt = "Eres un experto en logística. Extrae datos de un albarán. Devuelve ÚNICAMENTE un JSON válido sin bloques markdown: { \"invoice\": \"str\", \"order\": \"str\", \"internalRef\": \"str\", \"date\": \"YYYY-MM-DD\", \"items\": [{ \"mouserPn\": \"str\", \"custPn\": \"str\", \"desc\": \"str\", \"qty\": num, \"dateCode\": \"str\", \"lotCode\": \"str\", \"coo\": \"str\" }] }";
+                
+                // Las instrucciones van aquí para evitar el error de Unknown Field
+                const fullPrompt = `Eres un experto logístico. Tu tarea es extraer datos de un albarán de electrónica de Mouser. 
+                Extrae: Factura (Invoice), PO (Pedido), Mouser PN, Customer PN, Cantidad, Date Code, Lote y COO.
+                Devuelve la respuesta estrictamente en formato JSON válido sin markdown:
+                {
+                  "invoice": "string",
+                  "order": "string",
+                  "internalRef": "string",
+                  "date": "YYYY-MM-DD",
+                  "items": [
+                    { "mouserPn": "string", "custPn": "string", "desc": "string", "qty": number, "dateCode": "string", "lotCode": "string", "coo": "string" }
+                  ]
+                }
+                
+                Contenido del documento a analizar: ${rawText}`;
                 
                 try {
-                    // Estructura de payload corregida para v1 estable
                     const payload = {
-                        contents: [{ parts: [{ text: `Procesa este documento: ${rawText}` }, ...(fileData.base64 ? [{ inlineData: { mimeType: fileData.mime, data: fileData.base64 } }] : [])] }],
-                        system_instruction: { parts: [{ text: systemPrompt }] },
-                        generationConfig: { response_mime_type: "application/json", temperature: 0.1 }
+                        contents: [{ 
+                            parts: [
+                                { text: fullPrompt },
+                                ...(fileData.base64 ? [{ inlineData: { mimeType: fileData.mime, data: fileData.base64 } }] : [])
+                            ] 
+                        }],
+                        generationConfig: { 
+                            response_mime_type: "application/json",
+                            temperature: 0.1 
+                        }
                     };
                     
                     const response = await fetch(API_URL, {
@@ -200,15 +221,25 @@
 
                     if (!response.ok) {
                         const err = await response.json();
-                        throw new Error(err.error?.message || "Error de conexión");
+                        throw new Error(err.error?.message || "Error al conectar con la IA.");
                     }
 
                     const res = await response.json();
-                    let text = res.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
+                    let text = res.candidates[0].content.parts[0].text;
+                    // Limpieza por si acaso devuelve ```json
+                    text = text.replace(/```json|```/g, "").trim();
+                    
                     const extracted = JSON.parse(text);
-                    extracted.items = (extracted.items || []).map(i => ({ ...i, id: Math.random().toString(36).substr(2, 9), coo: getShortCoo(i.coo) }));
-                    setData(extracted); setView('print');
+                    extracted.items = (extracted.items || []).map(i => ({ 
+                        ...i, 
+                        id: Math.random().toString(36).substr(2, 9), 
+                        coo: getShortCoo(i.coo) 
+                    }));
+                    
+                    setData(extracted); 
+                    setView('print');
                 } catch (e) { 
+                    console.error(e);
                     setErrorMsg(`Error: ${e.message}. Intenta copiar el texto del PDF manualmente.`); 
                 } finally { setIsScanning(false); }
             };
@@ -218,12 +249,12 @@
                     {view !== 'scan' && (
                         <nav className="header-nav bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-xl sticky top-0 z-50 print:hidden">
                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('scan')}>
-                                <div className="bg-blue-600 text-white w-8 h-8 rounded flex items-center justify-center font-black text-xs">M</div>
+                                <div className="bg-blue-600 text-white w-8 h-8 rounded flex items-center justify-center font-black text-xs shadow-lg">M</div>
                                 <span className="text-xs font-black uppercase tracking-widest hidden md:inline">Logistics Terminal</span>
                             </div>
                             <div className="flex gap-2 bg-slate-800 p-1 rounded-xl">
-                                <button onClick={() => setView('edit')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'edit' ? 'bg-blue-600' : 'text-slate-400'}`}>EDITAR</button>
-                                <button onClick={() => setView('print')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'print' ? 'bg-blue-600' : 'text-slate-400'}`}>PREVIA</button>
+                                <button onClick={() => setView('edit')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'edit' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>EDITAR</button>
+                                <button onClick={() => setView('print')} className={`px-4 py-1.5 rounded-lg text-[10px] font-bold ${view === 'print' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>PREVIA</button>
                             </div>
                             <div className="flex gap-2">
                                 <button onClick={() => setIsAppMode(!isAppMode)} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-black border border-slate-700 uppercase">Modo App</button>
@@ -236,7 +267,7 @@
                             <div className="max-w-3xl w-full mt-10 md:mt-16 text-center animate-fade">
                                 <div className="w-24 h-24 bg-blue-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl font-black text-4xl">M</div>
                                 <h1 className="text-5xl font-black text-slate-900 tracking-tighter mb-4">Mouser Smart Scan</h1>
-                                <p className="text-slate-500 text-xl font-medium mb-12">Países automáticos y etiquetas industriales.</p>
+                                <p className="text-slate-500 text-xl font-medium mb-12">Conversión industrial de albaranes a etiquetas.</p>
                                 {errorMsg && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl mb-8 text-sm font-bold animate-pulse">⚠️ {errorMsg}</div>}
                                 <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-200 mb-10">
                                     <div className="space-y-6">
@@ -245,7 +276,7 @@
                                             <input type="file" className="hidden" onChange={handleFile} accept="application/pdf,image/*" />
                                         </label>
                                         <div className="relative flex items-center justify-center"><span className="absolute inset-0 border-t border-slate-100 top-1/2"></span><span className="relative bg-white px-3 text-[10px] font-black text-slate-300 uppercase">O pega el texto</span></div>
-                                        <textarea value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder="Contenido del albarán..." className="w-full h-32 p-6 bg-slate-50 border border-slate-200 rounded-[1.5rem] text-sm outline-none resize-none shadow-inner"></textarea>
+                                        <textarea value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder="Pega aquí el texto del documento..." className="w-full h-32 p-6 bg-slate-50 border border-slate-200 rounded-[1.5rem] text-sm outline-none resize-none shadow-inner"></textarea>
                                         <button onClick={processAI} disabled={isScanning || (!rawText.trim() && !fileData.base64)} className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black shadow-2xl hover:bg-blue-700 disabled:bg-slate-200 flex items-center justify-center gap-4 text-xl">
                                             {isScanning ? <div className="animate-spin h-6 w-6 border-4 border-white border-t-transparent rounded-full"></div> : "IDENTIFICAR MATERIAL"}
                                         </button>
@@ -281,15 +312,15 @@
                                 {data.items.map((item, idx) => (
                                     <div key={item.id} className="label-card bg-white p-12 border-[5px] border-slate-900 break-inside-avoid shadow-2xl w-full flex flex-col">
                                         <div className="flex justify-between border-b-[8px] border-slate-900 pb-8 mb-10">
-                                            <div><h2 className="text-5xl font-black uppercase leading-none tracking-tighter text-slate-900 mb-1">Mouser Logistics</h2><p className="text-[14px] font-bold text-slate-500 uppercase tracking-[0.4em]">Logística Certificada Celéstica</p></div>
-                                            <div className="text-right flex flex-col justify-center border-l-4 border-slate-100 pl-10"><span className="text-[11px] font-black text-slate-400 block uppercase">Factura</span><span className="text-4xl font-mono font-black">{data.invoice}</span></div>
+                                            <div><h2 className="text-5xl font-black uppercase tracking-tighter text-slate-900 mb-1 leading-none">Mouser Logistics</h2><p className="text-[14px] font-bold text-slate-500 uppercase tracking-[0.4em]">Celéstica Valencia S.A.</p></div>
+                                            <div className="text-right flex flex-col justify-center border-l-4 border-slate-100 pl-10"><span className="text-[11px] font-black text-slate-400 block uppercase">Factura / Invoice</span><span className="text-4xl font-mono font-black">{data.invoice}</span></div>
                                         </div>
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 mb-12">
-                                            <Barcode label="Mouser PN" value={item.mouserPn} blue />
-                                            <Barcode label="Customer PN" value={item.custPn} blue />
-                                            <Barcode label="Date Code" value={item.dateCode} />
-                                            <Barcode label="Quantity" value={item.qty} />
-                                            <Barcode label="Lot No" value={item.lotCode || 'N/A'} />
+                                            <Barcode label="Mouser Part Number" value={item.mouserPn} blue />
+                                            <Barcode label="Customer Part Number" value={item.custPn} blue />
+                                            <Barcode label="Date Code (DC)" value={item.dateCode} />
+                                            <Barcode label="Quantity (Qty)" value={item.qty} />
+                                            <Barcode label="Lot / Batch No" value={item.lotCode || 'N/A'} />
                                             <Barcode label="Purchase Order" value={data.order} />
                                             <Barcode label="Country of Origin" value={item.coo} />
                                             <div className="flex flex-col items-center justify-center bg-slate-50 border-2 border-slate-200 rounded-2xl p-4">
@@ -297,7 +328,7 @@
                                             </div>
                                         </div>
                                         <div className="border-t-2 border-slate-100 pt-10 text-[14px] font-bold text-slate-500 flex justify-between items-end">
-                                            <div className="flex-1 pr-10 border-r-2 border-slate-100"><span className="text-[11px] font-black text-slate-300 uppercase block mb-2 tracking-widest">Descripción</span><p className="text-xl font-black text-slate-900 uppercase italic leading-tight">{item.desc || 'Electronic Components'}</p></div>
+                                            <div className="flex-1 pr-10 border-r-2 border-slate-100"><span className="text-[11px] font-black text-slate-300 uppercase block mb-2 tracking-widest">Descripción del Artículo</span><p className="text-xl font-black text-slate-900 uppercase italic leading-tight">{item.desc || 'Electronic Components'}</p></div>
                                             <div className="text-right flex flex-col font-mono text-[11px] pl-10 space-y-1"><span>REF: {data.internalRef}</span><span>GEN: {new Date().toLocaleTimeString()}</span></div>
                                         </div>
                                     </div>
